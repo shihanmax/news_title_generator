@@ -1,0 +1,5 @@
+nlkit>=1.0.0
+torch>=1.8.0
+tqdm>=4.59.0
+gensim==3.8.3
+numpy==1.19.2
