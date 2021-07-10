@@ -35,7 +35,7 @@ class Trainer(object):
             self.valid_data_loader, 
             self.test_data_loader,
             self.vocab,
-        ) = self.prepare_data_and_vocab(self.config.raw_data_path)
+        ) = self.prepare_data_and_vocab()
 
         self.model = self.prepare_model(self.config, self.vocab, self.device)
 
