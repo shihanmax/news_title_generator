@@ -13,12 +13,12 @@ from nlkit.utils import (
     weight_init, get_linear_schedule_with_warmup_ep, 
     check_should_do_early_stopping, Phase
 )
-from nlkit.metrics import RougeHandler
+# from nlkit.metrics import RougeHandler
 
 from .config import Config
 from .data import PtrDataset, TextPair, RawDataProvider
 from .model import PointerNetwork
-from .utils import translate_logits, build_vocab
+from .utils import translate_logits, build_vocab, RougeHandler
 
 logger = logging.getLogger(__name__)
 
