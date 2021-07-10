@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 from .config import Config, Phase
-from .vocab import Vocab
+from .utils import Vocab
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +210,7 @@ class Decoder(nn.Module):
             Tensor: initial input of decoder: [bs, 1, input_hidden]
         """
         sos_idx = torch.tensor(
-            self.encoder.vocab.start_decode_idx, device=self.config.device,
+            self.encoder.vocab.sos_idx, device=self.config.device,
         )
 
         sos_embedding = self.encoder.embedding(sos_idx).view(1, 1, -1)

@@ -20,7 +20,7 @@ class Vocab(object):
 
 
 def build_vocab(
-    raw_text_list, keep_tokens=("PAD", "UNK", "SOS", "EOS"), 
+    raw_text_list, frequency=None, keep_tokens=("PAD", "UNK", "SOS", "EOS"), 
     ignore_tokens=("\n", "\t", "\r", " "), threshold=-1, 
     tokenizer=lambda x: list(x),
 ):
@@ -40,11 +40,12 @@ def build_vocab(
         str2idx: (Dict), str to idx mapper
         idx2str: (Dict), idx to str mapper
     """
-    frequency = Counter()
-    
-    for text in raw_text_list:
-        frequency.update(Counter(tokenizer(text)))
-    
+    if not frequency:
+        frequency = Counter()
+        
+        for text in raw_text_list:
+            frequency.update(Counter(tokenizer(text)))
+
     # collect tokens to delete
     token_to_del = []
     for k, v in frequency.items():
@@ -68,14 +69,16 @@ def build_vocab(
         str2idx[token] = idx
         idx2str[idx] = token
     
+    logger.info(f"Vocab built: length:{len(str2idx)}, freq limit:{threshold}")
+    
     return Vocab(str2idx, idx2str, 0, 1, 2, 3, len(str2idx))
 
 
-def translate_logits(idx_to_str, oov_mapper, token_ids, num):
+def translate_logits(idx2str, oov_mapper, token_ids, num):
     """Convert logits to text.
 
     Args:
-        idx_to_str (dict): mapper from token_ids to tokens
+        idx2str (dict): mapper from token_ids to tokens
         oov_mapper (dict): mapper from token_ids to oov tokens
         token_ids (Tensor): bs, max_len
         num (int): number of instances to return
@@ -99,8 +102,8 @@ def translate_logits(idx_to_str, oov_mapper, token_ids, num):
 
             if token_id in oov_mapper:
                 tokens.append(oov_mapper[token_id])
-            elif token_id in idx_to_str:
-                tokens.append(idx_to_str[token_id])
+            elif token_id in idx2str:
+                tokens.append(idx2str[token_id])
             else:
                 tokens.append("ERROR")
 

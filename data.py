@@ -1,12 +1,14 @@
 import logging
 import re
-
+import json
 import torch
+import random
+from collections import Counter
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from .config import Config
-from .utils import Vocab
+from .utils import Vocab, build_vocab
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +16,12 @@ logger = logging.getLogger(__name__)
 class TextPair(object):
     """Maintains a text pair: (raw_text, simplified text)."""
 
-    def __init__(self, source, simplified, tokenize):
+    def __init__(self, source, target, tokenize):
         """Tokenize source and simplified text into list of strings."""
-        self.source = tokenize(source)
-        self.simplified = tokenize(simplified)
-        self.src = source
-        self.tgt = simplified
+        self.tokenized_source = tokenize(source)
+        self.tokenized_target = tokenize(target)
+        self.source = source
+        self.target = target
 
 
 class RawDataProvider(object):
@@ -28,58 +30,82 @@ class RawDataProvider(object):
     def __init__(self, config: Config):
         self.config = config
 
-    def load_raw_data(self):
+    def _convert_news_to_pairs(self, news, tokenizer, create_vocab=False):
+        logger.info("start loading raw data...")
+        max_src_len = -1
+        max_tgt_len = -1
         
-
-        return train_set, valid_set, test_set
-
-    def build_data_to_text_pairs(self, questions):
+        frequency = Counter()
         text_pairs = []
-        # step_simp_pairs = []
+        
+        for n in tqdm(news):
+            title = n["title"].strip()
+            content = n["content"].strip()
 
-        for question in tqdm(questions):
-            thought_info = (
-                ThoughtHandler.collect_thought_info_of_question(question)
+            if not title or not content:
+                continue
+            
+            title = re.sub(r"[\n\t ]", "", title)
+            content = re.sub(r"[\n\t ]", "", content)
+            
+            if create_vocab:
+                frequency.update(Counter(tokenizer(title)))
+                frequency.update(Counter(tokenizer(content)))
+            
+            text_pairs.append(
+                TextPair(source=content, target=title, tokenize=tokenizer)
             )
+            
+            max_src_len = max(max_src_len, len(tokenizer(content)))
+            max_tgt_len = max(max_tgt_len, len(tokenizer(title)))
+        
+        if create_vocab:
+            vocab = build_vocab(
+                raw_text_list=None, frequency=frequency, 
+                threshold=self.config.vocab_freq, tokenizer=tokenizer,
+            )
+            self.config.vocab_size = vocab.size
+            logger.info(f"config: vocab_size set to :{vocab.size}")
+        else:
+            vocab = None
+        
+        logger.info(f"max_src_len:{max_src_len}, max_tgt_len:{max_tgt_len}")
+        
+        return text_pairs, vocab
+                
+    def load_raw_data(self, tokenizer, create_vocab):
+        with open(self.config.raw_data_path) as frd:
+            all_news = json.load(frd)
+        
+        random.seed(self.config.random_seed)
+        random.shuffle(all_news)
+        
+        if self.config.random_sample_size:
+            logger.info(f"采样{self.config.random_sample_size}条数据")
+            all_news = all_news[: self.config.random_sample_size]
+            
+        all_text_pairs, vocab = self._convert_news_to_pairs(
+            all_news, tokenizer, create_vocab,
+        )
+        
+        total = len(all_text_pairs)
 
-            thoughts = thought_info["thoughts"]
+        logger.info(f"total samples:{total}")
+        len_test = round(self.config.test_ratio * total)
+        len_valid = round(self.config.valid_ratio * total)
+        len_train = total - len_test - len_valid
+        
+        train_set = all_text_pairs[:len_train]
+        valid_set = all_text_pairs[len_train: len_train + len_valid]
+        test_set = all_text_pairs[-len_test:]
+        
+        logger.info(
+            f"Done splitting data: train:{len(train_set)}, "
+            f"valid:{len(valid_set)}, test:{len(test_set)}"
+        )
 
-            for thought in thoughts:
-
-                short_description = thought["short_description"]
-                guide = thought["guide"]
-                question = thought["question"]
-                step_text = thought["step_text"]
-
-                if step_text is None or step_text.count("$") % 2 != 0:
-                    continue
-
-                if not step_text.strip() or not short_description.strip():
-                    continue
-
-                # step_simp_pairs.append(
-                #     TextPair(step_text, short_description),
-                # )
-
-                # continue
-
-                if question:
-                    guide = question
-
-                if not guide:
-                    continue
-
-                # 删除文本中的空格、换行、tab...
-                guide = re.sub(r"[\n\t ]", "", guide)
-                short_description = re.sub(r"[\n\t ]", "", short_description)
-                new_pair = TextPair(guide, short_description)
-
-                if not new_pair.simplified or not new_pair.source:
-                    continue
-                text_pairs.append(new_pair)
-
-        return text_pairs
-
+        return train_set, valid_set, test_set, vocab
+    
 
 class PtrDataset(Dataset):
 
@@ -117,13 +143,13 @@ class PtrDataset(Dataset):
     def build_single_text_pair(self, text_pair: TextPair):
 
         # trunc first
-        src_tokenized = text_pair.source[: self.config.max_src_len]
-        tgt_tokenized = text_pair.simplified[: self.config.max_tgt_len - 1]
+        src = text_pair.tokenized_source[: self.config.max_src_len]
+        tgt = text_pair.tokenized_target[: self.config.max_tgt_len - 1]
 
         src_token_ids = []
         src_token_ids_with_oov = []
 
-        for token in src_tokenized:
+        for token in src:
             if token not in self.vocab.str2idx:
                 src_token_ids.append(self.vocab.unk_idx)
 
@@ -142,7 +168,7 @@ class PtrDataset(Dataset):
         tgt_token_ids = []
         tgt_token_ids_with_oov = []
 
-        for token in tgt_tokenized:
+        for token in tgt:
             if token not in self.vocab.str2idx:
                 tgt_token_ids.append(self.vocab.unk_idx)
 

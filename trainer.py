@@ -25,16 +25,18 @@ logger = logging.getLogger(__name__)
 
 class Trainer(object):
 
-    def __init__(self, config: Config, raw_data_path):
+    def __init__(self, config: Config):
 
         self.config = config
         self.device = self.config.device
         
-        self.train_data_loader, self.valid_data_loader, self.test_data_loader, 
-        raw_text_list = self.prepare_data(raw_data_path)
-        
-        self.vocab = self.prepare_vocab(raw_text_list)
-        
+        (
+            self.train_data_loader, 
+            self.valid_data_loader, 
+            self.test_data_loader,
+            self.vocab,
+        ) = self.prepare_data_and_vocab(self.config.raw_data_path)
+
         self.model = self.prepare_model(self.config, self.vocab, self.device)
 
         self.optimizer = AdamW(
@@ -59,6 +61,7 @@ class Trainer(object):
 
         logger.info("Trainer: model and data initialized")
 
+        exit(0)
         self.global_train_step = 0
         self.global_valid_step = 0
         self.global_test_step = 0
@@ -77,11 +80,27 @@ class Trainer(object):
         
         return model
     
-    def prepare_data(self, raw_data_path):
-        pass
-    
-    def prepare_vocab(self, raw_text_list):
-        return build_vocab(raw_text_list)
+    def prepare_data_and_vocab(self, raw_data_path):
+        data_provider = RawDataProvider(self.config)
+        train_set, valid_set, test_set, vocab = data_provider.load_raw_data(
+            tokenizer=lambda x: list(x), create_vocab=True,
+        )
+        
+        train_dataset = PtrDataset(self.config, vocab, train_set)
+        valid_dataset = PtrDataset(self.config, vocab, valid_set)
+        test_dataset = PtrDataset(self.config, vocab, test_set)
+        
+        train_data_loader = DataLoader(
+            train_dataset, batch_size=self.config.batch_size,
+        )
+        valid_data_loader = DataLoader(
+            valid_dataset, batch_size=self.config.batch_size,
+        )
+        test_data_loader = DataLoader(
+            test_dataset, batch_size=self.config.batch_size,
+        )
+        
+        return train_data_loader, valid_data_loader, test_data_loader, vocab
     
     def forward_model(self, data, oov_count, phase):
         loss, logits, p_gens = self.model(
@@ -145,8 +164,8 @@ class Trainer(object):
                     src_token_ids_with_oov=data["src_token_ids_with_oov"],
                     src_valid_length=data["src_valid_len"],
                     oov_count=oov_count_of_this_batch,
-                    SOS=self.vocab.start_decode_idx,
-                    EOS=self.vocab.end_decode_idx,
+                    SOS=self.vocab.sos_idx,
+                    EOS=self.vocab.eos_idx,
                     max_decode_len=self.config.max_decode_len,
                     beam_size=self.config.beam_size,
                     top_k=self.config.decode_top_k,
@@ -154,14 +173,14 @@ class Trainer(object):
                 )
 
                 src_samples = translate_logits(
-                    idx_to_str=self.vocab.idx_to_str,
+                    idx2str=self.vocab.idx2str,
                     oov_mapper=reverse_oov_mapper,
                     token_ids=data["src_token_ids_with_oov"],
                     num=-1,
                 )
 
                 tgt_samples = translate_logits(
-                    idx_to_str=self.vocab.idx_to_str,
+                    idx2str=self.vocab.idx2str,
                     oov_mapper=reverse_oov_mapper,
                     token_ids=data["tgt_token_ids_with_oov"],
                     num=-1,
@@ -172,7 +191,7 @@ class Trainer(object):
                 ).transpose(0, 1)
 
                 gen_samples = translate_logits(
-                    idx_to_str=self.vocab.idx_to_str,
+                    idx2str=self.vocab.idx2str,
                     oov_mapper=reverse_oov_mapper,
                     token_ids=samples,
                     num=-1,
@@ -248,7 +267,7 @@ class Trainer(object):
                     lambda x: " ".join(x), curr_epoch_pred_text_list,
                 ),
             )
-
+            
             rouge_score = RougeHandler.batch_get_rouge_score(
                 generated_list=curr_epoch_pred_text_list,
                 ground_truth_list=curr_epoch_real_text_list,
@@ -306,7 +325,8 @@ class Trainer(object):
                 self.rouge_avg_record_on_valid,
                 self.config.not_early_stopping_at_first,
                 self.config.es_with_no_improvement_after,
-                by_acc=True,
+                acc_like=True,
+                verbose=True,
             )
 
             if should_stop:
@@ -447,21 +467,21 @@ class Tester(object):
             src_token_ids_with_oov=data["src_token_ids_with_oov"],
             src_valid_length=data["src_valid_len"],
             oov_count=oov_count_of_this_batch,
-            SOS=self.vocab.start_decode_idx,
-            EOS=self.vocab.end_decode_idx,
+            SOS=self.vocab.sos_idx,
+            EOS=self.vocab.eos_idx,
             max_decode_len=self.config.max_decode_len,
             beam_size=beam_size,
             top_k=top_k,
             sample_count=-1,
         )
         src_samples = translate_logits(
-            idx_to_str=self.vocab.idx_to_str,
+            idx2str=self.vocab.idx2str,
             oov_mapper=reverse_oov_mapper,
             token_ids=data["src_token_ids_with_oov"],
             num=-1,
         )
         tgt_samples = translate_logits(
-            idx_to_str=self.vocab.idx_to_str,
+            idx2str=self.vocab.idx2str,
             oov_mapper=reverse_oov_mapper,
             token_ids=data["tgt_token_ids_with_oov"],
             num=-1,
@@ -471,7 +491,7 @@ class Tester(object):
         ).transpose(0, 1)
 
         gen_samples = translate_logits(
-            idx_to_str=self.vocab.idx_to_str,
+            idx2str=self.vocab.idx2str,
             oov_mapper=reverse_oov_mapper,
             token_ids=samples,
             num=-1,

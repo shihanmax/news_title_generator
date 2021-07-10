@@ -16,21 +16,26 @@ class Config(object):
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    raw_data_path = os.path.join(base_dir, "./resource/data/news.xml")
+    raw_data_path = os.path.join(base_dir, "./resource/data/sohu_data.json")
     model_path = os.path.join(base_dir, "./output/model")
     inference_model_path = os.path.join(base_dir, "./output/model.ep")
     summary_writer_path = os.path.join(base_dir, "./output/summary")
 
-    max_news_len = 2000  # 新闻最大长度 TODO
-    max_title_len = 20  # 最大新闻标题长度，包含<S>, <E>
+    random_seed = 1
+    
+    max_src_len = 2000  # 新闻最大长度 TODO
+    max_tgt_len = 45  # 最大新闻标题长度，包含<S>, <E>
     max_oov_num = 30  # 新闻中最多存在的未登陆词的数量
 
-    random_sample_size = None
+    random_sample_size = int(5e5)
     test_ratio = 0.1
     valid_ratio = 0.1
 
-    # lstm config
-    vocab_size = 1814  # TODO 
+    # vocab
+    vocab_freq = 10  # 忽略出现次数小于此值的词
+    vocab_size = None  # TODO
+    
+    # lstm 
     embedding_dim = 256
     hidden = 256
 
@@ -41,13 +46,14 @@ class Config(object):
     beam_size = 3
     decode_top_k = 1
     teacher_forcing = 0.8  # 执行teacherforcing的概率，设置为0则关闭
-
+    use_coverage = False  # coverage机制
+    
     # hyper-params of training
-    lr = 3e-3
+    lr = 1e-3
     betas = (0.9, 0.999)
     epoch = 100
     warmup_epochs = 5
-    batch_size = 128 if not random_sample_size else 3
+    batch_size = 64
     gradient_clip = 10
     not_early_stopping_at_first = 10
     es_with_no_improvement_after = 10
