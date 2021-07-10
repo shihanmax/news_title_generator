@@ -24,12 +24,12 @@ class Config(object):
     random_seed = 1
     
     max_src_len = 2000  # 新闻最大长度 TODO
-    max_tgt_len = 45  # 最大新闻标题长度，包含<S>, <E>
+    max_tgt_len = 40  # 最大新闻标题长度，包含<S>, <E>
     max_oov_num = 30  # 新闻中最多存在的未登陆词的数量
 
     random_sample_size = int(5e5)
-    test_ratio = 0.1
-    valid_ratio = 0.1
+    test_ratio = 0.01
+    valid_ratio = 0.01
 
     # vocab
     vocab_freq = 10  # 忽略出现次数小于此值的词

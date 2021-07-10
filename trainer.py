@@ -61,7 +61,6 @@ class Trainer(object):
 
         logger.info("Trainer: model and data initialized")
 
-        exit(0)
         self.global_train_step = 0
         self.global_valid_step = 0
         self.global_test_step = 0
@@ -80,7 +79,7 @@ class Trainer(object):
         
         return model
     
-    def prepare_data_and_vocab(self, raw_data_path):
+    def prepare_data_and_vocab(self):
         data_provider = RawDataProvider(self.config)
         train_set, valid_set, test_set, vocab = data_provider.load_raw_data(
             tokenizer=lambda x: list(x), create_vocab=True,
@@ -143,6 +142,7 @@ class Trainer(object):
 
             # data to device
             data = {key: value.to(self.device) for key, value in data.items()}
+            
             # forward the model
             if phase == Phase.TRAIN:
                 loss, logits, p_gens = self.forward_model(
